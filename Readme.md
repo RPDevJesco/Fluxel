@@ -1,131 +1,162 @@
 # Fluxel.js
 
-A DOM-less UI framework that renders UI using WebGL, completely bypassing both the DOM and Shadow DOM for maximum performance.
+A high-performance, DOM-less UI framework that renders interfaces directly with WebGL, featuring hardware-accelerated effects and efficient state management.
 
 ## 🚀 Overview
 
-Fluxel.js is a lightweight rendering engine that draws UI directly onto a canvas using GPU-accelerated rendering. Unlike traditional web frameworks, Fluxel.js:
+Fluxel.js is a cutting-edge rendering engine that draws UI directly onto a canvas using GPU-accelerated rendering. Unlike traditional web frameworks, Fluxel.js:
 
-- Does not use Virtual DOM
-- Does not manipulate the DOM directly
-- Does not use Shadow DOM
-- Provides high-performance, low-latency updates
-- Is compatible with modern browsers
-- Is lightweight and easy to use
+- Bypasses the DOM completely for maximum performance
+- Uses WebGL for hardware-accelerated rendering
+- Implements efficient batched rendering
+- Provides built-in shader-based effects
+- Features high-quality text rendering
+- Supports modern reactive state management
 
-## 🛠️ Core Features
+## 🎨 Feature Highlights
 
-### Canvas-Based Rendering Model
-Instead of relying on the DOM tree, Fluxel.js draws UI components onto a canvas dynamically:
-- UI elements are rendered as graphical elements
-- Everything is painted onto a canvas using WebGL
-- Components are rendered similar to game engine UI
+### Advanced Rendering Engine
+- WebGL2-based rendering pipeline
+- Shader-based UI effects
+- Hardware-accelerated gradients and animations
+- Efficient batch rendering system
+- High-quality text rendering with proper kerning
+
+### Component System
+```javascript
+// Example button component
+const incrementButton = renderer.createComponent(
+    'increment',
+    new FluxelButton(10, 10, 100, 40, '+', () => {
+        counter.increment();
+    })
+);
+
+// Example text component
+const counterText = renderer.createComponent(
+    'counter',
+    new FluxelText(120, 25, 
+        () => counter.getValue().toString(),
+        {
+            fontSize: 32,
+            fontWeight: 'bold',
+            textColor: [0.2, 0.2, 0.8, 1.0]
+        }
+    )
+);
+```
 
 ### Signal-Based State Management
-- Uses a reactive signal-based update model
-- Only repaints what has changed
-- No reflow or layout recalculation
-- No tree traversal
+```javascript
+const counter = new FluxelSignal(0);
 
-### GPU-Powered Rendering
-- WebGL optimizations for hardware acceleration
-- Efficient canvas batching
-- Minimal draw calls
+counter.subscribe((newValue) => {
+    console.log(`Counter updated: ${newValue}`);
+});
+```
 
-### Precompiled UI Components
-- Components are pre-compiled into renderable objects
-- Flat list structure instead of tree hierarchy
-- Ultra-fast lookup and updates
+### Shader-Based Effects
+```glsl
+// Example of built-in button shader
+float roundedRectangle(vec2 position, vec2 size, float radius) {
+    vec2 q = abs(position) - size + vec2(radius);
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+void main() {
+    // Hardware-accelerated rounded corners and gradients
+    if (uIsButton) {
+        vec2 pixelPos = vTexCoord * vSize;
+        float radius = 12.0;
+        float dist = roundedRectangle(pixelPos - vSize/2.0, vSize/2.0, radius);
+        // ... gradient effects
+    }
+}
+```
+
+## 🛠️ Getting Started
+
+### Installation
+```bash
+git clone https://github.com/yourusername/fluxel.js.git
+cd fluxel.js
+```
+
+### Basic Usage
+```javascript
+// Create a new renderer
+const renderer = new FluxelRenderer('canvas-id');
+
+// Create a signal for state management
+const counter = new FluxelSignal(0);
+
+// Create UI components
+const button = renderer.createComponent(
+    'increment',
+    new FluxelButton(10, 10, 100, 40, '+', () => {
+        counter.set(counter.get() + 1);
+    })
+);
+
+// Start rendering
+renderer.render();
+```
 
 ## 📦 Project Structure
 
 ```
 /Fluxel
-  ├── index.html           # Main demo page
-  ├── index.js             # Entry point
-  ├── FluxelSignal.js      # Signal implementation
-  ├── FluxelRenderer.js    # WebGL renderer
-  ├── /components          # UI components
-  │   ├── FluxelButton.js  # Button component
-  │   └── FluxelText.js    # Text component
-  └── /apps               
-      └── CounterApp.js    # Demo counter application
+  ├── src/
+  │   ├── core/
+  │   │   ├── FluxelRenderer.js     # Main rendering engine
+  │   │   ├── BatchRenderer.js      # Batched rendering system
+  │   │   ├── BufferManager.js      # WebGL buffer management
+  │   │   └── FluxelSignal.js       # State management
+  │   └── components/
+  │       ├── FluxelComponent.js    # Base component class
+  │       ├── FluxelButton.js       # Button component
+  │       └── FluxelText.js         # Text component
+  └── apps/
+      └── counter/                  # Counter demo app
 ```
 
-## 🚀 Getting Started
+## 🔧 Advanced Features
 
-1. Clone the repository:
-```bash
-git clone https://github.com/RPDevJesco/fluxel.git
-cd fluxel
-```
-
-2. Start a local development server:
-```bash
-# Using Python
-python -m http.server
-
-# Using Node.js
-npx http-server
-```
-
-3. Open `http://localhost:8000` in your browser
-
-## 💡 Usage Example
-
-Here's a simple counter app implementation:
-
+### Custom Components
 ```javascript
-import { FluxelRenderer } from './FluxelRenderer.js';
-import { FluxelSignal } from './FluxelSignal.js';
-import { FluxelButton } from './components/FluxelButton.js';
-import { FluxelText } from './components/FluxelText.js';
+class CustomComponent extends FluxelComponent {
+    constructor(x, y, width, height) {
+        super(x, y, width, height);
+        this.color = [1.0, 0.0, 0.0, 1.0]; // Red
+    }
 
-export class CounterApp {
-    constructor(canvasId) {
-        this.renderer = new FluxelRenderer(canvasId);
-        this.count = new FluxelSignal(0);
-
-        // Create UI components
-        const incrementButton = this.renderer.createComponent(
-            'increment',
-            new FluxelButton(10, 10, 100, 30, '+', () => {
-                this.count.set(this.count.get() + 1);
-            })
-        );
-
-        // Add counter display
-        const counterText = this.renderer.createComponent(
-            'counter',
-            new FluxelText(120, 25, () => this.count.get())
-        );
-
-        // Start rendering
-        this.renderer.render();
+    handleClick(x, y) {
+        if (this.isPointInside(x, y)) {
+            // Handle click event
+        }
     }
 }
 ```
 
-## 🔧 Technical Details
+### Performance Monitoring
+```javascript
+// Get performance metrics
+const metrics = renderer.getMetrics();
+console.log(`FPS: ${metrics.fps}`);
+console.log(`Draw calls: ${metrics.drawCalls}`);
+```
 
-### WebGL Rendering
-- Uses WebGL2 for hardware-accelerated graphics
-- Efficient shader-based rendering
-- Texture-based text rendering
-- Optimized vertex and texture coordinate buffers
+## 🎯 Upcoming Features
 
-### Signal System
-- Lightweight reactive state management
-- Efficient subscription model
-- Automatic UI updates on state changes
-
-### Event Handling
-- Canvas-based event delegation
-- Efficient hit testing
-- Hover and click state management
+- Flexible layout engine
+- Animation system
+- Advanced event handling
+- Component lifecycle management
+- Developer tools
+- Additional UI components
 
 ## 🙏 Acknowledgments
 
-- WebGL2 specification and documentation
+- WebGL2 specifications and documentation
 - Modern web framework design patterns
 - Game engine UI rendering techniques
