@@ -1,90 +1,205 @@
-export class FluxelText {
-    constructor(x, y, getValue) {
-        this.x = x;
-        this.y = y;
+import { FluxelComponent } from './FluxelComponent.js';
+
+export class FluxelText extends FluxelComponent {
+    constructor(x, y, getValue, options = {}) {
+        super(x, y, options.width || 100, options.height || 40);
+
         this.getValue = getValue;
+        this.fontSettings = {
+            size: options.fontSize || 24,
+            family: options.fontFamily || 'Arial',
+            weight: options.fontWeight || 'normal',
+            style: options.fontStyle || 'normal'
+        };
 
-        // Create vertex buffer data for a quad
-        this.vertices = new Float32Array([
-            x, y,               // Top left
-            x + 100, y,        // Top right
-            x, y + 40,         // Bottom left
-            x + 100, y + 40    // Bottom right
-        ]);
+        this.textColor = options.textColor || [0.0, 0.0, 0.0, 1.0];
+        this.align = options.align || 'center';
+        this.baseline = options.baseline || 'middle';
+        this.padding = options.padding || 5;
 
-        this.texCoords = new Float32Array([
-            0.0, 0.0,
-            1.0, 0.0,
-            0.0, 1.0,
-            1.0, 1.0
-        ]);
+        // Texture management
+        this.texture = null;
+        this.lastValue = null;
+        this.needsUpdate = true;
 
-        // Create persistent buffers
+        // WebGL resources
         this.vertexBuffer = null;
-        this.texCoordBuffer = null;
+        this.indexBuffer = null;
+        this.vao = null;
     }
 
-    initBuffers(gl) {
-        if (!this.vertexBuffer) {
-            this.vertexBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STATIC_DRAW);
-        }
+    initializeGLResources(gl) {
+        if (this.vao) return;
 
-        if (!this.texCoordBuffer) {
-            this.texCoordBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, this.texCoords, gl.STATIC_DRAW);
-        }
-    }
+        // Create VAO
+        this.vao = gl.createVertexArray();
+        gl.bindVertexArray(this.vao);
 
-    render(gl) {
-        const renderer = this.renderer;
-
-        // Initialize buffers if needed
-        this.initBuffers(gl);
-
-        // Bind vertex buffer
+        // Create vertex buffer
+        this.vertexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-        gl.enableVertexAttribArray(renderer.positionLocation);
-        gl.vertexAttribPointer(renderer.positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-        // Bind texture coordinate buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-        gl.enableVertexAttribArray(renderer.texCoordLocation);
-        gl.vertexAttribPointer(renderer.texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+        // Create quad vertices
+        const vertices = new Float32Array([
+            0.0, 0.0,  // Bottom-left
+            1.0, 0.0,  // Bottom-right
+            0.0, 1.0,  // Top-left
+            1.0, 1.0   // Top-right
+        ]);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
-        // Get current value
-        const value = this.getValue();
+        // Set up vertex attributes
+        gl.enableVertexAttribArray(0); // position attribute
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+        // texture coordinate buffer
+        const texCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+
+        const texCoords = new Float32Array([
+            0.0, 0.0,  // Bottom-left
+            1.0, 0.0,  // Bottom-right
+            0.0, 1.0,  // Top-left
+            1.0, 1.0   // Top-right
+        ]);
+        gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+
+        // Set up texture coordinate attribute
+        gl.enableVertexAttribArray(1); // texCoord attribute
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+        // Create index buffer
+        this.indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+
+        const indices = new Uint16Array([
+            0, 1, 2,    // First triangle
+            2, 1, 3     // Second triangle
+        ]);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+        // Cleanup
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    }
+
+    getTextureInfo() {
+        const currentValue = this.getValue();
+        return {
+            texture: this.texture,
+            needsUpdate: currentValue !== this.lastValue || this.needsUpdate
+        };
+    }
+
+    updateTextTexture(gl) {
+        const currentValue = this.getValue();
 
         // Create temporary canvas for text rendering
         const textCanvas = document.createElement('canvas');
         const ctx = textCanvas.getContext('2d');
 
         // Set canvas size
-        textCanvas.width = 100;
-        textCanvas.height = 40;
+        textCanvas.width = this.width;
+        textCanvas.height = this.height;
 
         // Configure text rendering
-        ctx.font = 'bold 24px Arial';
-        ctx.fillStyle = 'black';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(value.toString(), textCanvas.width / 2, textCanvas.height / 2);
+        ctx.font = `${this.fontSettings.weight} ${this.fontSettings.size}px ${this.fontSettings.family}`;
+        ctx.fillStyle = `rgba(${this.textColor.map(c => c * 255).join(',')})`;
+        ctx.textAlign = this.align;
+        ctx.textBaseline = this.baseline;
 
-        // Create and configure texture
-        const texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
+        // Clear the canvas
+        ctx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+
+        // Calculate text position
+        let textX = this.width / 2;
+        if (this.align === 'left') textX = this.padding;
+        if (this.align === 'right') textX = this.width - this.padding;
+
+        let textY = this.height / 2;
+        if (this.baseline === 'top') textY = this.padding;
+        if (this.baseline === 'bottom') textY = this.height - this.padding;
+
+        // Draw the text
+        ctx.fillText(currentValue.toString(), textX, textY);
+
+        // Create or update texture
+        if (!this.texture) {
+            this.texture = gl.createTexture();
+        }
+
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textCanvas);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        // Set uniforms for text rendering
-        gl.uniform4fv(renderer.colorLocation, [0.0, 0.0, 0.0, 1.0]);
-        gl.uniform1i(renderer.useTextureLocation, true);
-        gl.uniform1i(renderer.textureLocation, 0);
+        this.lastValue = currentValue;
+        this.needsUpdate = false;
+        return this.texture;
+    }
 
-        // Draw text
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    getColor() {
+        return this.textColor;
+    }
+
+    setFont(options = {}) {
+        let changed = false;
+
+        if (options.size && options.size !== this.fontSettings.size) {
+            this.fontSettings.size = options.size;
+            changed = true;
+        }
+
+        if (options.family && options.family !== this.fontSettings.family) {
+            this.fontSettings.family = options.family;
+            changed = true;
+        }
+
+        if (options.weight && options.weight !== this.fontSettings.weight) {
+            this.fontSettings.weight = options.weight;
+            changed = true;
+        }
+
+        if (options.style && options.style !== this.fontSettings.style) {
+            this.fontSettings.style = options.style;
+            changed = true;
+        }
+
+        if (changed) {
+            this.needsUpdate = true;
+            if (this.renderer) {
+                this.renderer.requestBatchUpdate(this);
+            }
+        }
+    }
+
+    setColor(color) {
+        this.textColor = color;
+        this.needsUpdate = true;
+        if (this.renderer) {
+            this.renderer.requestBatchUpdate(this);
+        }
+    }
+
+    dispose(gl) {
+        if (this.texture) {
+            gl.deleteTexture(this.texture);
+            this.texture = null;
+        }
+        if (this.vao) {
+            gl.deleteVertexArray(this.vao);
+            this.vao = null;
+        }
+        if (this.vertexBuffer) {
+            gl.deleteBuffer(this.vertexBuffer);
+            this.vertexBuffer = null;
+        }
+        if (this.indexBuffer) {
+            gl.deleteBuffer(this.indexBuffer);
+            this.indexBuffer = null;
+        }
     }
 }
