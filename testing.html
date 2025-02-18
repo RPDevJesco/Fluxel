@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Fluxel SEO Test Suite</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Test suite for Fluxel.js SEO capabilities">
+
+  <!-- OpenGraph tags for testing -->
+  <meta property="og:title" content="Fluxel SEO Test Suite">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://example.com/fluxel-test">
+  <meta property="og:image" content="https://example.com/fluxel-preview.png">
+
+  <!-- JSON-LD for testing -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Fluxel Test Suite",
+      "applicationCategory": "DeveloperTool",
+      "operatingSystem": "Web Browser"
+    }
+  </script>
+</head>
+<body>
+<canvas id="fluxel-canvas" width="400" height="300"></canvas>
+<div id="seo-report"></div>
+<div id="test-controls">
+  <button id="run-tests">Run SEO Tests</button>
+  <button id="export-report">Export Report</button>
+  <label>
+    <input type="checkbox" id="headless-mode">
+    Headless Mode
+  </label>
+</div>
+
+<script type="module">
+  import { runSEOTest } from './tests/testRunner.js';
+  import { CounterApp } from './apps/CounterApp.js';
+
+  // Initialize test controls
+  document.getElementById('run-tests').addEventListener('click', async () => {
+    const headless = document.getElementById('headless-mode').checked;
+
+    try {
+      // Initialize app
+      window.counterApp = new CounterApp('fluxel-canvas');
+
+      // Run tests
+      const result = await runSEOTest({ runHeadless: headless });
+
+      if (headless) {
+        console.log('Test Results:', result);
+      }
+    } catch (error) {
+      console.error('Test Error:', error);
+    }
+  });
+
+  document.getElementById('export-report').addEventListener('click', () => {
+    const reportElement = document.getElementById('seo-report');
+    if (!reportElement.firstChild) {
+      alert('No report to export. Please run tests first.');
+      return;
+    }
+
+    const report = {
+      html: reportElement.innerHTML,
+      json: window.lastTestResult,
+      timestamp: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fluxel-seo-report-${new Date().toISOString()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+<style>
+  #test-controls {
+    margin: 20px;
+    padding: 20px;
+    background: #f5f5f5;
+    border-radius: 8px;
+  }
+
+  button {
+    padding: 8px 16px;
+    margin-right: 10px;
+    border: none;
+    border-radius: 4px;
+    background: #2196F3;
+    color: white;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: #1976D2;
+  }
+
+  label {
+    margin-left: 10px;
+  }
+</style>
+</body>
+</html>

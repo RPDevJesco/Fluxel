@@ -7,14 +7,22 @@ export class CounterApp {
     constructor(canvasId) {
         console.log('Initializing CounterApp...');
 
-        // Initialize renderer
-        this.renderer = new FluxelRenderer(canvasId);
+        // Initialize renderer with metadata
+        this.renderer = new FluxelRenderer(canvasId, {
+            metadata: {
+                title: 'Interactive Counter | Fluxel Demo',
+                description: 'Fluxel.js is a high-performance WebGL-based UI framework that delivers exceptional rendering speed and visual quality while maintaining SEO compatibility. Perfect for modern web applications.'
+            }
+        });
 
         // Create signal for counter value
         this.count = new FluxelSignal(0);
 
         // Create UI components with proper spacing and sizes
         this.createComponents();
+
+        // Set up metadata updates based on state changes
+        this.setupMetadataUpdates();
 
         // Start the render loop
         console.log('Starting render loop...');
@@ -106,5 +114,24 @@ export class CounterApp {
         });
 
         console.log('Components created successfully');
+    }
+
+    setupMetadataUpdates() {
+        // Update structured data when count changes
+        this.count.subscribe((newValue) => {
+            const structuredData = {
+                "@context": "https://schema.org",
+                "@type": "SoftwareApplication",
+                "name": "Fluxel Counter Demo",
+                "applicationCategory": "WebApplication",
+                "interactionStatistic": {
+                    "@type": "InteractionCounter",
+                    "interactionType": "https://schema.org/InteractAction",
+                    "userInteractionCount": newValue
+                }
+            };
+
+            this.renderer.metadata.updateStructuredData(structuredData);
+        });
     }
 }

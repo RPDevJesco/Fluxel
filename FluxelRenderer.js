@@ -3,9 +3,10 @@ import { BufferManager } from './BufferManager.js';
 import { GlyphAtlas } from './GlyphAtlas.js';
 import { FluxelButton } from "./components/FluxelButton.js";
 import { FluxelText } from "./components/FluxelText.js";
+import {FluxelMetadata} from "./FluxelMetadata.js";
 
 export class FluxelRenderer {
-    constructor(canvasId) {
+    constructor(canvasId, config = {}) {
         this.canvas = document.getElementById(canvasId);
         if (!this.canvas) {
             throw new Error(`Canvas with id ${canvasId} not found`);
@@ -24,10 +25,30 @@ export class FluxelRenderer {
         this.setupShaders();
         this.setupGeometry();
         this.setupEventListeners();
+        this.metadata = new FluxelMetadata();
+        this.setupMetadata(config.metadata || {});
 
         // Performance monitoring
         this.lastPerformanceLog = performance.now();
         this.performanceLogInterval = 1000;
+    }
+
+    setupMetadata(config) {
+        // Set default metadata
+        this.metadata.setMeta('title', config.title || 'Fluxel Application');
+        this.metadata.setMeta('description', config.description || '');
+
+        // Set up default structured data
+        const defaultStructuredData = {
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            "name": config.title || 'Fluxel Application',
+            "applicationCategory": "WebApplication",
+            "browserRequirements": "Requires WebGL2",
+            "permissions": "webgl"
+        };
+
+        this.metadata.updateStructuredData(defaultStructuredData);
     }
 
     resizeCanvas() {
