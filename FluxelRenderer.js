@@ -4,6 +4,7 @@ import { GlyphAtlas } from './GlyphAtlas.js';
 import { FluxelButton } from "./components/FluxelButton.js";
 import { FluxelText } from "./components/FluxelText.js";
 import {FluxelMetadata} from "./FluxelMetadata.js";
+import {FluxelContainer} from "./components/FluxelContainer.js";
 
 export class FluxelRenderer {
     constructor(canvasId, config = {}) {
@@ -75,89 +76,139 @@ export class FluxelRenderer {
         const gl = this.gl;
 
         const vertexShader = `#version 300 es
-            in vec2 position;
-            in vec2 texCoord;
+        in vec2 position;
+        in vec2 texCoord;
+        
+        uniform vec2 uResolution;
+        uniform vec2 uPosition;
+        uniform vec2 uSize;
+        uniform vec4 uColor;
+        uniform bool uIsButton;
+        uniform bool uIsPressed;
+        uniform bool uIsContainer;
+        uniform float uElevation;
+        
+        out vec2 vTexCoord;
+        out vec4 vColor;
+        out vec2 vSize;
+        out vec2 vPixelCoord;
+        out float vElevation;
+        
+        void main() {
+            vec2 pos = position * uSize + uPosition;
             
-            uniform vec2 uResolution;
-            uniform vec2 uPosition;
-            uniform vec2 uSize;
-            uniform vec4 uColor;
-            uniform bool uIsButton;
-            uniform bool uIsPressed;
-            
-            out vec2 vTexCoord;
-            out vec4 vColor;
-            out vec2 vSize;
-            
-            void main() {
-                vec2 pos = position * uSize + uPosition;
-                vec2 clipSpace = (pos / uResolution) * 2.0 - 1.0;
-                clipSpace.y = -clipSpace.y;
-                gl_Position = vec4(clipSpace, 0.0, 1.0);
-                vTexCoord = texCoord;
-                vColor = uColor;
-                vSize = uSize;
+            // Apply elevation offset if container
+            if (uIsContainer && uElevation > 0.0) {
+                pos.y += uElevation * 0.5;
             }
-        `;
+            
+            vec2 clipSpace = (pos / uResolution) * 2.0 - 1.0;
+            clipSpace.y = -clipSpace.y;
+            gl_Position = vec4(clipSpace, 0.0, 1.0);
+            
+            vTexCoord = texCoord;
+            vColor = uColor;
+            vSize = uSize;
+            vPixelCoord = position * uSize;
+            vElevation = uElevation;
+        }
+    `;
 
         const fragmentShader = `#version 300 es
-            precision mediump float;
-            
-            in vec2 vTexCoord;
-            in vec4 vColor;
-            in vec2 vSize;
-            
-            uniform sampler2D uTexture;
-            uniform bool uUseTexture;
-            uniform bool uIsButton;
-            uniform bool uIsPressed;
-            
-            out vec4 fragColor;
-            
-            float roundedRectangle(vec2 position, vec2 size, float radius) {
-                vec2 q = abs(position) - size + vec2(radius);
-                return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-            }
-            
-            void main() {
-                if (uIsButton) {
-                    // Button rendering with gradient and rounded corners
-                    vec2 pixelPos = vTexCoord * vSize;
-                    float radius = 12.0;
-                    
-                    float dist = roundedRectangle(pixelPos - vSize/2.0, vSize/2.0, radius);
+        precision highp float;
+        
+        in vec2 vTexCoord;
+        in vec4 vColor;
+        in vec2 vSize;
+        in vec2 vPixelCoord;
+        in float vElevation;
+        
+        uniform sampler2D uTexture;
+        uniform bool uUseTexture;
+        uniform bool uIsButton;
+        uniform bool uIsPressed;
+        uniform bool uIsContainer;
+        uniform float uBorderRadius;
+        uniform vec4 uShadowColor;
+        uniform vec2 uShadowOffset;
+        uniform float uShadowBlur;
+        
+        out vec4 fragColor;
+        
+        float roundedRectangle(vec2 position, vec2 size, float radius) {
+            vec2 q = abs(position) - size + vec2(radius);
+            return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+        }
+        
+        float gaussianBlur(float x, float sigma) {
+            return exp(-(x * x) / (2.0 * sigma * sigma));
+        }
+        
+        void main() {
+            if (uIsContainer) {
+                // Container rendering with shadow and rounded corners
+                vec2 pixelPos = vPixelCoord;
+                float dist = roundedRectangle(pixelPos - vSize/2.0, vSize/2.0, uBorderRadius);
+                
+                if (vElevation > 0.0) {
+                    // Calculate shadow
+                    vec2 shadowPos = pixelPos - uShadowOffset;
+                    float shadowDist = roundedRectangle(shadowPos - vSize/2.0, vSize/2.0, uBorderRadius);
+                    float shadowAlpha = 1.0 - smoothstep(-uShadowBlur, uShadowBlur, shadowDist);
+                    shadowAlpha *= gaussianBlur(shadowDist + uShadowBlur, uShadowBlur * 0.5);
                     
                     if (dist > 0.0) {
-                        discard;
+                        // Only render shadow if we're outside the container
+                        fragColor = vec4(uShadowColor.rgb, uShadowColor.a * shadowAlpha);
+                        return;
                     }
-                    
-                    float gradientPos = vTexCoord.y;
-                    vec4 baseColor = vColor;
-                    
-                    float topHighlight = smoothstep(0.0, 0.2, gradientPos);
-                    float bottomShadow = smoothstep(0.8, 1.0, gradientPos);
-                    
-                    vec4 finalColor = baseColor;
-                    finalColor.rgb *= mix(1.2, 0.8, gradientPos);
-                    
-                    if (!uIsPressed) {
-                        finalColor.rgb += vec3(0.2) * (1.0 - topHighlight);
-                        finalColor.rgb -= vec3(0.2) * bottomShadow;
-                    } else {
-                        finalColor.rgb *= 0.9;
-                    }
-                    
-                    fragColor = finalColor;
-                } else if (uUseTexture) {
-                    // Text rendering
-                    vec4 texColor = texture(uTexture, vTexCoord);
-                    fragColor = vec4(vColor.rgb, texColor.a * vColor.a);
-                } else {
-                    // Basic shape rendering
-                    fragColor = vColor;
+                } else if (dist > 0.0) {
+                    discard;
                 }
+                
+                // Render container with subtle gradient
+                float gradientFactor = 1.0 - (vTexCoord.y * 0.1);
+                fragColor = vColor * vec4(vec3(gradientFactor), 1.0);
+                
+            } else if (uIsButton) {
+                // Existing button rendering
+                vec2 pixelPos = vTexCoord * vSize;
+                float radius = 12.0;
+                
+                float dist = roundedRectangle(pixelPos - vSize/2.0, vSize/2.0, radius);
+                
+                if (dist > 0.0) {
+                    discard;
+                }
+                
+                float gradientPos = vTexCoord.y;
+                vec4 baseColor = vColor;
+                
+                float topHighlight = smoothstep(0.0, 0.2, gradientPos);
+                float bottomShadow = smoothstep(0.8, 1.0, gradientPos);
+                
+                vec4 finalColor = baseColor;
+                finalColor.rgb *= mix(1.2, 0.8, gradientPos);
+                
+                if (!uIsPressed) {
+                    finalColor.rgb += vec3(0.2) * (1.0 - topHighlight);
+                    finalColor.rgb -= vec3(0.2) * bottomShadow;
+                } else {
+                    finalColor.rgb *= 0.9;
+                }
+                
+                fragColor = finalColor;
+                
+            } else if (uUseTexture) {
+                // Text rendering
+                vec4 texColor = texture(uTexture, vTexCoord);
+                fragColor = vec4(vColor.rgb, texColor.a * vColor.a);
+            } else {
+                // Basic shape rendering
+                fragColor = vColor;
             }
-        `;
+        }
+    `;
 
         // Create and compile shaders
         const vs = this.compileShader(vertexShader, gl.VERTEX_SHADER);
@@ -178,7 +229,13 @@ export class FluxelRenderer {
                 texture: gl.getUniformLocation(program, 'uTexture'),
                 useTexture: gl.getUniformLocation(program, 'uUseTexture'),
                 isButton: gl.getUniformLocation(program, 'uIsButton'),
-                isPressed: gl.getUniformLocation(program, 'uIsPressed')
+                isPressed: gl.getUniformLocation(program, 'uIsPressed'),
+                isContainer: gl.getUniformLocation(program, 'uIsContainer'),
+                borderRadius: gl.getUniformLocation(program, 'uBorderRadius'),
+                elevation: gl.getUniformLocation(program, 'uElevation'),
+                shadowColor: gl.getUniformLocation(program, 'uShadowColor'),
+                shadowOffset: gl.getUniformLocation(program, 'uShadowOffset'),
+                shadowBlur: gl.getUniformLocation(program, 'uShadowBlur')
             }
         };
 
@@ -249,14 +306,34 @@ export class FluxelRenderer {
         return component;
     }
 
+    registerContainerComponents(containerId, container) {
+        container.children.forEach((child, id) => {
+            child.component.parent = container;
+            // Update the component's stored reference
+            this.components.set(id, child.component);
+        });
+    }
+
     renderComponent(component) {
         const gl = this.gl;
 
-        // Set component-specific uniforms
+        // Get final position based on component hierarchy
+        let finalX = component.x;
+        let finalY = component.y;
+        let current = component;
+
+        // Traverse up the parent chain to calculate final position
+        while (current.parent) {
+            finalX += current.parent.x + current.parent.padding;
+            finalY += current.parent.y + current.parent.padding;
+            current = current.parent;
+        }
+
+        // Set component-specific uniforms with calculated position
         gl.uniform2f(
             this.shaderProgram.uniforms.position,
-            component.x,
-            component.y
+            finalX,
+            finalY
         );
         gl.uniform2f(
             this.shaderProgram.uniforms.size,
@@ -282,6 +359,47 @@ export class FluxelRenderer {
             gl.uniform1i(this.shaderProgram.uniforms.useTexture, 0);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }
+    }
+
+    render() {
+        const gl = this.gl;
+
+        // Clear and setup
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.useProgram(this.shaderProgram.program);
+
+        // Update canvas size and viewport
+        this.resizeCanvas();
+
+        // Set shared uniforms
+        gl.uniform2f(
+            this.shaderProgram.uniforms.resolution,
+            this.canvas.width,
+            this.canvas.height
+        );
+
+        // Set up buffer bindings
+        this.bufferManager.setupForRendering(gl, this);
+
+        // First render containers
+        this.components.forEach((component, id) => {
+            if (component instanceof FluxelContainer) {
+                component.calculateLayout(); // Update layout first
+                if (component.isVisible) {
+                    this.renderComponent(component);
+                }
+            }
+        });
+
+        // Then render non-container components
+        this.components.forEach((component, id) => {
+            if (!(component instanceof FluxelContainer) && component.isVisible) {
+                this.renderComponent(component);
+            }
+        });
+
+        requestAnimationFrame(() => this.render());
     }
 
     renderButtonWithDepth(button) {
@@ -384,44 +502,6 @@ export class FluxelRenderer {
 
     requestBatchUpdate(component) {
         this.pendingUpdates.add(component);
-    }
-
-    render() {
-        const gl = this.gl;
-        const currentTime = performance.now();
-
-        // Clear and setup
-        gl.clearColor(1.0, 1.0, 1.0, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.useProgram(this.shaderProgram.program);
-
-        // Update canvas size and viewport
-        this.resizeCanvas();
-
-        // Set shared uniforms
-        gl.uniform2f(
-            this.shaderProgram.uniforms.resolution,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-        // Set up buffer bindings
-        this.bufferManager.setupForRendering(gl, this);
-
-        // Render all components
-        this.components.forEach((component, id) => {
-            if (component.isVisible) {
-                this.renderComponent(component);
-            }
-        });
-
-        // Performance logging uncomment to be spammed
-        if (currentTime - this.lastPerformanceLog > this.performanceLogInterval) {
-            //this.logPerformanceMetrics();
-            this.lastPerformanceLog = currentTime;
-        }
-
-        requestAnimationFrame(() => this.render());
     }
 
     compileShader(source, type) {

@@ -92,8 +92,30 @@ export class FluxelText extends FluxelComponent {
         };
     }
 
+    measureTextWidth(text) {
+        const measureCanvas = document.createElement('canvas');
+        const ctx = measureCanvas.getContext('2d');
+
+        ctx.font = `${this.fontSettings.weight} ${this.fontSettings.size}px ${this.fontSettings.family}`;
+
+        const metrics = ctx.measureText(text);
+
+        return Math.ceil(metrics.width + 20); // 10px padding on each side
+    }
+
     updateTextTexture(gl) {
         const currentValue = this.getValue();
+
+        // Measure the text width first
+        const requiredWidth = this.measureTextWidth(currentValue.toString());
+
+        // Update component width if needed
+        if (requiredWidth > this.width) {
+            this.width = requiredWidth;
+            if (this.parent && this.parent.needsLayout) {
+                this.parent.needsLayout = true;
+            }
+        }
 
         // Create temporary canvas for text rendering
         const textCanvas = document.createElement('canvas');
@@ -114,12 +136,12 @@ export class FluxelText extends FluxelComponent {
 
         // Calculate text position
         let textX = this.width / 2;
-        if (this.align === 'left') textX = this.padding;
-        if (this.align === 'right') textX = this.width - this.padding;
+        if (this.align === 'left') textX = 10; // Add left padding
+        if (this.align === 'right') textX = this.width - 10;
 
         let textY = this.height / 2;
-        if (this.baseline === 'top') textY = this.padding;
-        if (this.baseline === 'bottom') textY = this.height - this.padding;
+        if (this.baseline === 'top') textY = 10;
+        if (this.baseline === 'bottom') textY = this.height - 10;
 
         // Draw the text
         ctx.fillText(currentValue.toString(), textX, textY);
